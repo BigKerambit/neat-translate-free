@@ -1,6 +1,10 @@
-const targetSelect = document.getElementById("target");
-const autoCheckbox = document.getElementById("autoTranslate");
+const target = document.getElementById("target");
+const autoTranslate = document.getElementById("autoTranslate");
+const showOriginal = document.getElementById("showOriginal");
+const themeButton = document.getElementById("themeButton");
+
 const translateButton = document.getElementById("translate");
+const selectionButton = document.getElementById("selection");
 const restoreButton = document.getElementById("restore");
 const errorElement = document.getElementById("error");
 
@@ -12,14 +16,30 @@ function clearError() {
   errorElement.textContent = "";
 }
 
-function setBusy(busy) {
-  targetSelect.disabled = busy;
-  autoCheckbox.disabled = busy;
-  translateButton.disabled = busy;
-  restoreButton.disabled = busy;
+function applyTheme(isDark) {
+  document.body.classList.toggle("dark", isDark);
+
+  const description = isDark
+    ? "Текущая тема: тёмная. Переключить на светлую"
+    : "Текущая тема: светлая. Переключить на тёмную";
+
+  themeButton.title = description;
+  themeButton.setAttribute("aria-label", description);
 }
 
-async function getActiveTab() {
+function setBusy(busy) {
+  target.disabled = busy;
+  autoTranslate.disabled = busy;
+  showOriginal.disabled = busy;
+
+  translateButton.disabled = busy;
+  selectionButton.disabled = busy;
+  restoreButton.disabled = busy;
+
+  // Кнопка темы остаётся доступной даже во время перевода.
+}
+
+async function activeTab() {
   const [tab] = await chrome.tabs.query({
     active: true,
     currentWindow: true
@@ -33,11 +53,9 @@ async function getActiveTab() {
 }
 
 async function sendToPage(message) {
-  const tab = await getActiveTab();
+  const tab = await activeTab();
 
-  // На обычных сайтах content.js уже установлен через manifest.
-  // Внедрение здесь также помогает для вкладок, открытых до обновления
-  // расширения. Защита в content.js не создаст второй обработчик.
+  // Для вкладок, которые были открыты до обновления расширения.
   await chrome.scripting.executeScript({
     target: {
       tabId: tab.id
@@ -48,9 +66,50 @@ async function sendToPage(message) {
   return chrome.tabs.sendMessage(tab.id, message);
 }
 
-async function showSavedAutoError() {
+async function runAction(message) {
+  clearError();
+  setBusy(true);
+
   try {
-    const tab = await getActiveTab();
+    const response = await sendToPage(message);
+
+    if (!response?.ok) {
+      throw new Error(
+        response?.error || "Не удалось выполнить действие."
+      );
+    }
+
+    if (response.failed > 0) {
+      showError(
+        response.error || "Часть текста не удалось перевести."
+      );
+    }
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function initialize() {
+  try {
+    const settings = await chrome.storage.local.get({
+      target: "ru",
+      autoTranslate: false,
+      showOriginal: true,
+      darkMode: false
+    });
+
+    target.value = settings.target;
+    autoTranslate.checked = settings.autoTranslate;
+    showOriginal.checked = settings.showOriginal;
+
+    applyTheme(settings.darkMode);
+
+    // Удаляем сохранённый список пауз от предыдущей версии.
+    await chrome.storage.local.remove("pausedSites");
+
+    const tab = await activeTab();
 
     const response = await chrome.runtime.sendMessage({
       action: "getAutoError",
@@ -60,125 +119,82 @@ async function showSavedAutoError() {
     if (response?.error) {
       showError(response.error);
     }
-  } catch {
-    // Открытие popup само по себе не должно показывать ошибку
-    // для служебных вкладок Chrome.
-  }
-}
-
-async function initialize() {
-  try {
-    const settings = await chrome.storage.local.get({
-      target: "ru",
-      autoTranslate: false
-    });
-
-    targetSelect.value = settings.target;
-    autoCheckbox.checked = settings.autoTranslate;
-
-    await showSavedAutoError();
   } catch (error) {
     showError(error.message);
   }
 }
 
-targetSelect.addEventListener("change", async () => {
+target.addEventListener("change", async () => {
   clearError();
 
   try {
     await chrome.storage.local.set({
-      target: targetSelect.value
+      target: target.value
     });
   } catch (error) {
     showError(error.message);
   }
 });
 
-autoCheckbox.addEventListener("change", async () => {
+autoTranslate.addEventListener("change", async () => {
   clearError();
-
-  const enabled = autoCheckbox.checked;
 
   try {
     await chrome.storage.local.set({
-      autoTranslate: enabled,
-      target: targetSelect.value
+      autoTranslate: autoTranslate.checked,
+      target: target.value
     });
-
-    // Запускаем автоперевод и на текущей вкладке, не дожидаясь
-    // перехода пользователя на другой сайт.
-    if (enabled) {
-      const response = await sendToPage({
-        action: "translate",
-        target: targetSelect.value
-      });
-
-      if (!response?.ok) {
-        throw new Error(
-          response?.error || "Не удалось перевести текущую страницу."
-        );
-      }
-    }
   } catch (error) {
     showError(error.message);
   }
 });
 
-translateButton.addEventListener("click", async () => {
+showOriginal.addEventListener("change", async () => {
   clearError();
-  setBusy(true);
 
   try {
-    const response = await sendToPage({
-      action: "translate",
-      target: targetSelect.value
+    await chrome.storage.local.set({
+      showOriginal: showOriginal.checked
     });
-
-    if (!response?.ok) {
-      throw new Error(
-        response?.error || "Не удалось перевести страницу."
-      );
-    }
-
-    if (response.failed > 0) {
-      showError(
-        response.error ||
-        "Некоторые фрагменты не удалось перевести."
-      );
-    }
   } catch (error) {
     showError(error.message);
-  } finally {
-    setBusy(false);
   }
 });
 
-restoreButton.addEventListener("click", async () => {
-  clearError();
-  setBusy(true);
+themeButton.addEventListener("click", async () => {
+  const previousValue = document.body.classList.contains("dark");
+  const newValue = !previousValue;
+
+  applyTheme(newValue);
 
   try {
-    const response = await sendToPage({
-      action: "restore"
-    });
-
-    if (!response?.ok) {
-      throw new Error(
-        response?.error || "Не удалось восстановить оригинал."
-      );
-    }
-
-    const tab = await getActiveTab();
-
-    await chrome.runtime.sendMessage({
-      action: "clearAutoError",
-      tabId: tab.id
+    await chrome.storage.local.set({
+      darkMode: newValue
     });
   } catch (error) {
+    applyTheme(previousValue);
     showError(error.message);
-  } finally {
-    setBusy(false);
   }
+});
+
+translateButton.addEventListener("click", () => {
+  runAction({
+    action: "translate",
+    target: target.value
+  });
+});
+
+selectionButton.addEventListener("click", () => {
+  runAction({
+    action: "translateSelection",
+    target: target.value
+  });
+});
+
+restoreButton.addEventListener("click", () => {
+  runAction({
+    action: "restore"
+  });
 });
 
 initialize();

@@ -9,92 +9,248 @@
       box-sizing: border-box;
     }
 
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fc;
+      --card: #ffffff;
+      --text: #172033;
+      --muted: #748096;
+      --border: #e6eaf2;
+      --primary: #5268ee;
+      --primary-hover: #4055dc;
+      --soft: #f0f2ff;
+      --error: #c83232;
+      --shadow: 0 14px 35px rgba(35, 49, 93, 0.08);
+    }
+
+    body.dark {
+      color-scheme: dark;
+      --bg: #111520;
+      --card: #1c2230;
+      --text: #f1f4fa;
+      --muted: #a2adc0;
+      --border: #30394b;
+      --primary: #7385ff;
+      --primary-hover: #8796ff;
+      --soft: #292f50;
+      --error: #ff8585;
+      --shadow: 0 14px 35px rgba(0, 0, 0, 0.18);
+    }
+
     body {
-      width: 290px;
+      width: 326px;
       margin: 0;
-      padding: 18px;
-      background: #fff;
-      color: #172033;
-      font: 14px/1.45 system-ui, -apple-system, sans-serif;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.45 system-ui, -apple-system, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      padding: 17px;
+      border: 1px solid var(--border);
+      border-radius: 17px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-height: 38px;
+      margin-bottom: 19px;
+      padding-right: 40px;
+    }
+
+    .logo {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      place-items: center;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #5268ee, #8976f1);
+      color: #fff;
+      font-size: 17px;
+      font-weight: 800;
     }
 
     h1 {
-      margin: 0 0 18px;
-      font-size: 18px;
+      margin: 0;
+      font-size: 16px;
       line-height: 1.2;
+    }
+
+    .subtitle {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .theme-button {
+      position: absolute;
+      top: 17px;
+      right: 17px;
+      display: grid;
+      width: 36px;
+      height: 36px;
+      min-height: 36px;
+      place-items: center;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .theme-button:hover {
+      background: var(--soft);
+    }
+
+    .theme-button:active {
+      transform: scale(0.94);
+    }
+
+    .theme-button svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Значок обозначает именно текущую тему. */
+    .moon-icon,
+    body.dark .sun-icon {
+      display: none;
+    }
+
+    body.dark .moon-icon {
+      display: block;
     }
 
     .field-label {
       display: block;
-      margin-bottom: 6px;
-      font-weight: 600;
-    }
-
-    select,
-    button {
-      width: 100%;
-      min-height: 38px;
-      border-radius: 9px;
-      font: inherit;
+      margin: 0 0 7px;
+      font-weight: 650;
     }
 
     select {
-      padding: 8px 10px;
-      border: 1px solid #d0d5dd;
-      background: #fff;
-      color: #172033;
+      width: 100%;
+      height: 39px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      outline: none;
+      background: var(--card);
+      color: var(--text);
+      font: inherit;
     }
 
-    .switch-row {
+    select:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .options {
+      display: grid;
+      gap: 1px;
+      margin: 15px 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .option {
       display: flex;
+      min-height: 43px;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-top: 18px;
+      padding: 8px 11px;
       cursor: pointer;
-      font-weight: 600;
     }
 
-    .switch-row input {
-      width: 18px;
-      height: 18px;
+    .option + .option {
+      border-top: 1px solid var(--border);
+    }
+
+    .option span {
+      font-weight: 550;
+    }
+
+    .option input {
+      width: 17px;
+      height: 17px;
       margin: 0;
-      accent-color: #365cf5;
+      accent-color: var(--primary);
       cursor: pointer;
     }
 
-    button {
-      padding: 8px 12px;
-      border: 1px solid transparent;
-      cursor: pointer;
-      font-weight: 600;
+    .hint {
+      margin: -5px 0 15px;
+      color: var(--muted);
+      font-size: 11px;
     }
 
-    button:disabled {
-      opacity: 0.6;
+    .buttons {
+      display: grid;
+      gap: 8px;
+    }
+
+    .action-button {
+      min-height: 38px;
+      padding: 8px 11px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 650;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .action-button:hover:not(:disabled) {
+      background: var(--soft);
+    }
+
+    .action-button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .action-button:disabled {
+      opacity: 0.55;
       cursor: wait;
     }
 
     #translate {
-      margin-top: 18px;
-      background: #365cf5;
+      border-color: transparent;
+      background: var(--primary);
       color: #fff;
     }
 
     #translate:hover:not(:disabled) {
-      background: #294de2;
+      background: var(--primary-hover);
     }
 
-    #restore {
-      margin-top: 8px;
-      border-color: #d0d5dd;
-      background: #fff;
-      color: #344054;
+    .secondary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
 
     #error {
-      margin: 12px 0 0;
-      color: #b42318;
+      margin: 12px 2px 0;
+      color: var(--error);
       font-size: 12px;
       overflow-wrap: anywhere;
     }
@@ -106,31 +262,81 @@
 </head>
 
 <body>
-  <h1>Neat Translate</h1>
+  <main class="card">
+    <div class="header">
+      <div class="logo">文</div>
 
-  <label class="field-label" for="target">Перевести на</label>
+      <div>
+        <h1>Neat Translate</h1>
+        <p class="subtitle">Перевод без замены разметки</p>
+      </div>
+    </div>
 
-  <select id="target">
-    <option value="ru">Русский</option>
-    <option value="en">Английский</option>
-    <option value="de">Немецкий</option>
-    <option value="fr">Французский</option>
-    <option value="es">Испанский</option>
-    <option value="it">Итальянский</option>
-    <option value="pt">Португальский</option>
-    <option value="ja">Японский</option>
-    <option value="zh-CN">Китайский</option>
-  </select>
+    <button
+      id="themeButton"
+      class="theme-button"
+      type="button"
+      title="Текущая тема: светлая. Переключить на тёмную"
+      aria-label="Текущая тема: светлая. Переключить на тёмную"
+    >
+      <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path>
+      </svg>
 
-  <label class="switch-row" for="autoTranslate">
-    <span>Автоперевод</span>
-    <input id="autoTranslate" type="checkbox">
-  </label>
+      <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"></path>
+      </svg>
+    </button>
 
-  <button id="translate">Перевести страницу</button>
-  <button id="restore">Вернуть оригинал</button>
+    <label class="field-label" for="target">Язык перевода</label>
 
-  <p id="error" role="alert"></p>
+    <select id="target">
+      <option value="ru">Русский</option>
+      <option value="en">Английский</option>
+      <option value="de">Немецкий</option>
+      <option value="fr">Французский</option>
+      <option value="es">Испанский</option>
+      <option value="it">Итальянский</option>
+      <option value="pt">Португальский</option>
+      <option value="ja">Японский</option>
+      <option value="zh-CN">Китайский</option>
+    </select>
+
+    <div class="options">
+      <label class="option">
+        <span>Автоперевод</span>
+        <input id="autoTranslate" type="checkbox">
+      </label>
+
+      <label class="option">
+        <span>Оригинал по Alt</span>
+        <input id="showOriginal" type="checkbox">
+      </label>
+    </div>
+
+    <p class="hint">
+      Зажми Alt и наведи курсор на переведённый текст.
+    </p>
+
+    <div class="buttons">
+      <button id="translate" class="action-button" type="button">
+        Перевести страницу
+      </button>
+
+      <div class="secondary-row">
+        <button id="selection" class="action-button" type="button">
+          Выделенный текст
+        </button>
+
+        <button id="restore" class="action-button" type="button">
+          Оригинал
+        </button>
+      </div>
+    </div>
+
+    <p id="error" role="alert"></p>
+  </main>
 
   <script src="popup.js"></script>
 </body>
