@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 290px;
+      margin: 0;
+      padding: 18px;
+      background: #fff;
+      color: #172033;
+      font: 14px/1.45 system-ui, -apple-system, sans-serif;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    select,
+    button {
+      width: 100%;
+      min-height: 38px;
+      border-radius: 9px;
+      font: inherit;
+    }
+
+    select {
+      padding: 8px 10px;
+      border: 1px solid #d0d5dd;
+      background: #fff;
+      color: #172033;
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .switch-row input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: #365cf5;
+      cursor: pointer;
+    }
+
+    button {
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    #translate {
+      margin-top: 18px;
+      background: #365cf5;
+      color: #fff;
+    }
+
+    #translate:hover:not(:disabled) {
+      background: #294de2;
+    }
+
+    #restore {
+      margin-top: 8px;
+      border-color: #d0d5dd;
+      background: #fff;
+      color: #344054;
+    }
+
+    #error {
+      margin: 12px 0 0;
+      color: #b42318;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    #error:empty {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Neat Translate</h1>
+
+  <label class="field-label" for="target">Перевести на</label>
+
+  <select id="target">
+    <option value="ru">Русский</option>
+    <option value="en">Английский</option>
+    <option value="de">Немецкий</option>
+    <option value="fr">Французский</option>
+    <option value="es">Испанский</option>
+    <option value="it">Итальянский</option>
+    <option value="pt">Португальский</option>
+    <option value="ja">Японский</option>
+    <option value="zh-CN">Китайский</option>
+  </select>
+
+  <label class="switch-row" for="autoTranslate">
+    <span>Автоперевод</span>
+    <input id="autoTranslate" type="checkbox">
+  </label>
+
+  <button id="translate">Перевести страницу</button>
+  <button id="restore">Вернуть оригинал</button>
+
+  <p id="error" role="alert"></p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
