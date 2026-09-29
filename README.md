@@ -37,7 +37,7 @@
 
 ### Исключение сайта из автоперевода
 
-Если включить **«Не переводить этот сайт автоматически»** на странице `https://github.com/users/Flowseal`, автоперевод будет отключён на всех страницах `github.com`.
+Если включить **«Не переводить этот сайт автоматически»** на странице `https://github.com/Flowseal`, автоперевод будет отключён на всех страницах `github.com`.
 
 Исключение действует по **точному доменному имени**: оно не распространяется, например, на `gist.github.com`. Ручной перевод исключённого сайта остаётся доступным.
 
@@ -173,7 +173,7 @@ Translation uses a free Google Translate web endpoint. No API key is required.
 
 ### Excluding a website
 
-If you enable **“Do not automatically translate this site”** on `https://github.com/users/Flowseal`, automatic translation will be disabled on all pages of `github.com`.
+If you enable **“Do not automatically translate this site”** on `https://github.com/Flowseal`, automatic translation will be disabled on all pages of `github.com`.
 
 Exclusions match the **exact hostname**. Excluding `github.com` does not exclude `gist.github.com`. Manual translation remains available on excluded websites.
 
