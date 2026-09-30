@@ -9,6 +9,17 @@
   const MAX_CHUNK_LENGTH = 700;
   const WORKERS = 8;
 
+  // Пакетный перевод: короткие однострочные строки
+  // объединяются в один запрос (меньше обращений к
+  // сервису -> быстрее и реже упираемся в лимит частоты).
+  const BATCH_MAX_ITEMS = 20;
+  const BATCH_MAX_LENGTH = 1000;
+  const BATCH_ITEM_MAX_LENGTH = 300;
+
+  // Верхний предел проходов ручного перевода,
+  // страховка от бесконечного цикла на «живых» страницах.
+  const MAX_MANUAL_PASSES = 100;
+
   const SKIP_SELECTOR = [
     "script",
     "style",
@@ -275,6 +286,38 @@
           }
         }
       }
+
+      // У кнопок <input type="button|submit|reset"> надпись
+      // живёт в атрибуте value, а не в текстовом узле.
+      if (items.length < limit) {
+        for (
+          const element of root.querySelectorAll(
+            'input[type="button"][value], input[type="submit"][value], input[type="reset"][value]'
+          )
+        ) {
+          if (items.length >= limit) {
+            break;
+          }
+
+          if (!allowed(element)) {
+            continue;
+          }
+
+          const item = {
+            node: element,
+            attribute: "value"
+          };
+
+          if (
+            needsTranslation(
+              currentSession,
+              item
+            )
+          ) {
+            items.push(item);
+          }
+        }
+      }
     }
 
     return items;
@@ -434,6 +477,237 @@
     write(item, translated);
 
     return true;
+  }
+
+  function sleep(delay) {
+    return new Promise((resolve) =>
+      setTimeout(resolve, delay)
+    );
+  }
+
+  // Короткие однострочные элементы группируются в пакет,
+  // длинные и многострочные идут отдельными запросами.
+  function makeUnits(items) {
+    const units = [];
+    let batch = [];
+    let batchLength = 0;
+
+    const flushBatch = () => {
+      if (batch.length > 0) {
+        units.push(batch);
+        batch = [];
+        batchLength = 0;
+      }
+    };
+
+    for (const item of items) {
+      const value = read(item);
+
+      const parts =
+        typeof value === "string"
+          ? outerWhitespace(value)
+          : null;
+
+      const batchable =
+        parts !== null &&
+        parts.middle.length > 0 &&
+        !parts.middle.includes("\n") &&
+        parts.middle.length <= BATCH_ITEM_MAX_LENGTH;
+
+      if (!batchable) {
+        flushBatch();
+        units.push(item);
+        continue;
+      }
+
+      if (
+        batch.length >= BATCH_MAX_ITEMS ||
+        batchLength + parts.middle.length >
+          BATCH_MAX_LENGTH
+      ) {
+        flushBatch();
+      }
+
+      batch.push(item);
+      batchLength += parts.middle.length;
+    }
+
+    flushBatch();
+
+    return units;
+  }
+
+  async function translateBatchUnit(
+    currentSession,
+    batchItems
+  ) {
+    const usable = [];
+
+    for (const item of batchItems) {
+      const original = read(item);
+
+      if (!useful(original)) {
+        continue;
+      }
+
+      const parts = outerWhitespace(original);
+
+      if (!parts.middle) {
+        continue;
+      }
+
+      usable.push({ item, parts, original });
+    }
+
+    if (usable.length === 0) {
+      return {
+        failed: 0,
+        firstError: null,
+        rateLimited: false
+      };
+    }
+
+    const markFailed = (entry) => {
+      currentSession.failures.set(
+        entry.item.node,
+        {
+          value: entry.original,
+          attribute: entry.item.attribute,
+          time: Date.now()
+        }
+      );
+    };
+
+    let translatedMiddles = null;
+    let firstError = null;
+
+    try {
+      const response =
+        await chrome.runtime.sendMessage({
+          action: "translateBatch",
+          texts: usable.map(
+            (entry) => entry.parts.middle
+          ),
+          target: currentSession.target
+        });
+
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ||
+          "Не удалось перевести текст."
+        );
+      }
+
+      if (
+        !Array.isArray(response.translated) ||
+        response.translated.length !== usable.length
+      ) {
+        throw new Error(
+          "Сервис перевода вернул некорректный ответ."
+        );
+      }
+
+      translatedMiddles = response.translated;
+    } catch (error) {
+      firstError = error;
+    }
+
+    let rateLimited = Boolean(
+      firstError?.message.includes(
+        "ограничил частоту"
+      )
+    );
+
+    // Пакетный запрос не удался — надёжный путь:
+    // перевести элементы по очереди, как раньше.
+    if (!translatedMiddles) {
+      let failed = 0;
+
+      for (const entry of usable) {
+        if (
+          !currentSession.active ||
+          rateLimited
+        ) {
+          break;
+        }
+
+        try {
+          await translateItem(
+            currentSession,
+            entry.item
+          );
+        } catch (error) {
+          failed++;
+          firstError = firstError || error;
+          markFailed(entry);
+
+          if (
+            error.message.includes(
+              "ограничил частоту"
+            )
+          ) {
+            rateLimited = true;
+          }
+        }
+      }
+
+      return { failed, firstError, rateLimited };
+    }
+
+    let failed = 0;
+
+    for (
+      let index = 0;
+      index < usable.length;
+      index++
+    ) {
+      const entry = usable[index];
+      const translatedMiddle =
+        translatedMiddles[index];
+
+      if (
+        !currentSession.active ||
+        read(entry.item) !== entry.original
+      ) {
+        continue;
+      }
+
+      if (
+        typeof translatedMiddle !== "string" ||
+        translatedMiddle.length === 0
+      ) {
+        failed++;
+
+        firstError =
+          firstError ||
+          new Error(
+            "Сервис вернул пустой перевод."
+          );
+
+        markFailed(entry);
+        continue;
+      }
+
+      const translated =
+        entry.parts.before +
+        translatedMiddle +
+        entry.parts.after;
+
+      saveRecord(
+        currentSession,
+        entry.item,
+        entry.original,
+        translated
+      );
+
+      if (translated === entry.original) {
+        continue;
+      }
+
+      write(entry.item, translated);
+    }
+
+    return { failed, firstError, rateLimited };
   }
 
   function observeRoot(currentSession, root) {
@@ -684,19 +958,45 @@
           MAX_ITEMS_PER_PASS
         );
 
-        let nextIndex = 0;
+        const units = makeUnits(items);
+        let nextUnit = 0;
 
         async function worker() {
           while (
             currentSession.active &&
-            nextIndex < items.length
+            nextUnit < units.length
           ) {
-            const item = items[nextIndex++];
+            const unit = units[nextUnit++];
+
+            if (Array.isArray(unit)) {
+              const batchResult =
+                await translateBatchUnit(
+                  currentSession,
+                  unit
+                );
+
+              failed += batchResult.failed;
+
+              if (
+                !firstError &&
+                batchResult.firstError
+              ) {
+                firstError =
+                  batchResult.firstError;
+              }
+
+              if (batchResult.rateLimited) {
+                nextUnit = units.length;
+                break;
+              }
+
+              continue;
+            }
 
             try {
               await translateItem(
                 currentSession,
-                item
+                unit
               );
             } catch (error) {
               failed++;
@@ -706,10 +1006,10 @@
               }
 
               currentSession.failures.set(
-                item.node,
+                unit.node,
                 {
-                  value: read(item),
-                  attribute: item.attribute,
+                  value: read(unit),
+                  attribute: unit.attribute,
                   time: Date.now()
                 }
               );
@@ -719,7 +1019,7 @@
                   "ограничил частоту"
                 )
               ) {
-                nextIndex = items.length;
+                nextUnit = units.length;
                 break;
               }
             }
@@ -731,7 +1031,7 @@
             {
               length: Math.min(
                 WORKERS,
-                items.length
+                units.length
               )
             },
             () => worker()
@@ -784,7 +1084,26 @@
     }
 
     const currentSession = session;
-    const result = await scan(currentSession);
+
+    // Ручной перевод доводит страницу до конца: за один
+    // проход переводится не более MAX_ITEMS_PER_PASS
+    // элементов, а на длинных страницах их тысячи.
+    let result = await scan(currentSession);
+    let passes = 1;
+
+    while (
+      !automatic &&
+      currentSession.active &&
+      result.hasMore &&
+      passes < MAX_MANUAL_PASSES &&
+      !(result.error || "").includes(
+        "ограничил частоту"
+      )
+    ) {
+      await sleep(90);
+      result = await scan(currentSession);
+      passes++;
+    }
 
     if (
       automatic &&

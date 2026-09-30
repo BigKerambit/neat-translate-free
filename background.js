@@ -13,6 +13,11 @@ const ALLOWED_TARGETS = new Set([
 const MAX_CONCURRENT_REQUESTS = 8;
 const MAX_TEXT_LENGTH = 700;
 
+// Пакетный перевод: несколько коротких строк
+// одним запросом (склеиваются переносом строки).
+const BATCH_MAX_ITEMS = 30;
+const BATCH_MAX_TOTAL_LENGTH = 4500;
+
 // Постоянный кэш переводов. Ограничен количеством записей
 // и временем жизни, поэтому не занимает больше нескольких
 // мегабайт на диске даже при долгом использовании.
@@ -294,6 +299,83 @@ function translate(text, target) {
   return promise;
 }
 
+// Пакетный перевод: каждая строка сначала ищется в кэше
+// отдельно, а отсутствующие уходят одним запросом —
+// сервис надёжно сохраняет границы строк для коротких фраз.
+async function batchTranslate(texts, target) {
+  const results = new Array(texts.length);
+  const missingIndexes = [];
+
+  for (let index = 0; index < texts.length; index++) {
+    const key = `${target}\n${texts[index]}`;
+    const cached = cache.get(key);
+
+    if (cached) {
+      // LRU: попадание переставляет запись в конец.
+      cache.delete(key);
+      cache.set(key, cached);
+      results[index] = cached.t;
+    } else {
+      missingIndexes.push(index);
+    }
+  }
+
+  if (missingIndexes.length === 0) {
+    return results;
+  }
+
+  const missingTexts = missingIndexes.map(
+    (index) => texts[index]
+  );
+
+  const joined = await enqueue(() =>
+    requestTranslation(
+      missingTexts.join("\n"),
+      target
+    )
+  );
+
+  const parts = joined.split("\n");
+
+  const splitOk =
+    parts.length === missingTexts.length &&
+    parts.every(
+      (part) =>
+        typeof part === "string" &&
+        part.length > 0
+    );
+
+  if (splitOk) {
+    for (
+      let partIndex = 0;
+      partIndex < parts.length;
+      partIndex++
+    ) {
+      const itemIndex = missingIndexes[partIndex];
+
+      results[itemIndex] = parts[partIndex];
+
+      saveCache(
+        `${target}\n${texts[itemIndex]}`,
+        parts[partIndex]
+      );
+    }
+
+    return results;
+  }
+
+  // Границы строк потерялись при переводе — надёжный
+  // вариант: запросить каждую строку отдельно.
+  for (const itemIndex of missingIndexes) {
+    results[itemIndex] = await translate(
+      texts[itemIndex],
+      target
+    );
+  }
+
+  return results;
+}
+
 function errorKey(tabId) {
   return `autoError:${tabId}`;
 }
@@ -547,6 +629,55 @@ chrome.runtime.onMessage.addListener(
               ok: true,
               translated
             });
+          },
+          (error) => {
+            sendResponse({
+              ok: false,
+              error: error.message
+            });
+          }
+        );
+
+      return true;
+    }
+
+    if (message?.action === "translateBatch") {
+      const texts = message.texts;
+
+      const validTexts =
+        Array.isArray(texts) &&
+        texts.length > 0 &&
+        texts.length <= BATCH_MAX_ITEMS &&
+        texts.every(
+          (text) =>
+            typeof text === "string" &&
+            text.length > 0 &&
+            text.length <= MAX_TEXT_LENGTH &&
+            !text.includes("\n")
+        ) &&
+        texts.join("").length <=
+          BATCH_MAX_TOTAL_LENGTH;
+
+      if (
+        !sender.tab ||
+        !validTexts ||
+        !ALLOWED_TARGETS.has(message.target)
+      ) {
+        sendResponse({
+          ok: false,
+          error: "Некорректный запрос на перевод."
+        });
+
+        return;
+      }
+
+      cacheReady
+        .then(() =>
+          batchTranslate(texts, message.target)
+        )
+        .then(
+          (translated) => {
+            sendResponse({ ok: true, translated });
           },
           (error) => {
             sendResponse({
