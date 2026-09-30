@@ -585,7 +585,9 @@ chrome.runtime.onInstalled.addListener(() => {
     periodInMinutes: 24 * 60
   });
 
-  checkForUpdates().catch(() => {});
+  // После установки/обновления проверяем сразу,
+  // в обход троттлинга.
+  checkForUpdates(true).catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
