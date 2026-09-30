@@ -16,8 +16,6 @@ const updateBanner = document.getElementById("updateBanner");
 const updateVersion = document.getElementById("updateVersion");
 const updateButton = document.getElementById("updateButton");
 const appVersion = document.getElementById("appVersion");
-const checkUpdatesButton =
-  document.getElementById("checkUpdates");
 
 const REPO_URL = "https://github.com/BigKerambit/neat-translate-free";
 
@@ -215,16 +213,9 @@ async function initialize() {
       showError(response.error);
     }
 
-    // Фоновая проверка обновлений: сама решит, пора ли
-    // дёргать GitHub (не чаще раза в 12 часов).
-    chrome.runtime.sendMessage({
-      action: "checkForUpdates",
-      force: false
-    }).then((updateResponse) => {
-      if (updateResponse?.ok) {
-        renderUpdateInfo(updateResponse.update ?? null);
-      }
-    }).catch(() => {});
+    // Проверка обновлений идёт фоном при запуске браузера
+    // и раз в сутки (alarms) — здесь просто показываем
+    // уже найденный результат из хранилища.
   } catch (error) {
     showError(error.message);
   }
@@ -325,43 +316,6 @@ updateButton.addEventListener("click", () => {
   }
 });
 
-checkUpdatesButton.addEventListener("click", async () => {
-  clearError();
-
-  checkUpdatesButton.disabled = true;
-  checkUpdatesButton.classList.remove("ok");
-  checkUpdatesButton.classList.add("spin");
-
-  try {
-    const response = await chrome.runtime.sendMessage({
-      action: "checkForUpdates",
-      force: true
-    });
-
-    if (!response?.ok) {
-      throw new Error(
-        response?.error || "Не удалось проверить обновления."
-      );
-    }
-
-    renderUpdateInfo(response.update ?? null);
-
-    if (!response.update) {
-      // Галочка «у вас последняя версия» на пару секунд.
-      checkUpdatesButton.classList.add("ok");
-
-      setTimeout(() => {
-        checkUpdatesButton.classList.remove("ok");
-      }, 2500);
-    }
-  } catch (error) {
-    showError(error.message);
-  } finally {
-    checkUpdatesButton.classList.remove("spin");
-    checkUpdatesButton.disabled = false;
-  }
-});
-
 // Поддерживаем переключатель и баннер в актуальном состоянии,
 // если хранилище изменилось, пока попап был открыт.
 chrome.storage.onChanged.addListener(
@@ -400,4 +354,9 @@ restoreButton.addEventListener("click", () => {
   });
 });
 
-initialize();
+// В расширении chrome API доступен всегда; проверка нужна,
+// чтобы файл без ошибок открывался и как обычный HTML
+// (например, в предпросмотре).
+if (typeof chrome !== "undefined" && chrome.runtime?.id) {
+  initialize();
+}

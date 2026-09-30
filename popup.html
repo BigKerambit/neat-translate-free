@@ -20,7 +20,6 @@
       --primary-hover: #4055dc;
       --soft: #f0f2ff;
       --error: #c83232;
-      --success: #2f9e44;
       --shadow: 0 14px 35px rgba(35, 49, 93, 0.08);
     }
 
@@ -35,7 +34,6 @@
       --primary-hover: #8796ff;
       --soft: #292f50;
       --error: #ff8585;
-      --success: #51cf66;
       --shadow: 0 14px 35px rgba(0, 0, 0, 0.18);
     }
 
@@ -351,49 +349,6 @@
     .footer-fill {
       flex: 1;
     }
-
-    .icon-button {
-      display: grid;
-      width: 24px;
-      height: 24px;
-      min-height: 24px;
-      place-items: center;
-      padding: 0;
-      border: 0;
-      border-radius: 7px;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      font: inherit;
-      font-size: 14px;
-      line-height: 1;
-      transition: background 0.15s, color 0.15s;
-    }
-
-    .icon-button:hover:not(:disabled) {
-      background: var(--soft);
-      color: var(--text);
-    }
-
-    .icon-button:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-
-    .icon-button.spin {
-      animation: nt-rotate 0.9s linear infinite;
-    }
-
-    .icon-button.ok {
-      color: var(--success);
-      animation: none;
-    }
-
-    @keyframes nt-rotate {
-      to {
-        transform: rotate(360deg);
-      }
-    }
   </style>
 </head>
 
@@ -503,17 +458,9 @@
       <span class="footer-fill"></span>
 
       <span>v<span id="appVersion"></span></span>
-
-      <button
-        id="checkUpdates"
-        class="icon-button"
-        type="button"
-        title="Проверить обновления"
-        aria-label="Проверить обновления"
-      >⟳</button>
     </div>
   </main>
 
   <script src="popup.js"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a433ba56fb33663a',t:'MTc5MDc3NjU1NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a433de8388e0663a',t:'MTc5MDc3ODAzNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
