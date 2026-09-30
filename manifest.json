@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Neat Translate Free",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Перевод сайтов без замены разметки",
   "permissions": [
     "activeTab",
@@ -41,4 +41,4 @@
       "128": "icons/icon128.png"
     }
   }
-}
+}

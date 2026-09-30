@@ -42,7 +42,12 @@
 
   function currentHost() {
     try {
-      return location.hostname;
+      const hostname = location.hostname.toLowerCase();
+
+      // Адреса с «www.» и без него считаются одним сайтом.
+      return hostname.startsWith("www.")
+        ? hostname.slice(4)
+        : hostname;
     } catch {
       return "";
     }
@@ -1115,16 +1120,25 @@
     }
   );
 
-    async function applySettings() {
+  async function applySettings() {
     const settings = await chrome.storage.local.get({
       autoTranslate: false,
       target: "ru",
-      showOriginal: true
+      showOriginal: true,
+      disabledSites: []
     });
 
     showOriginalEnabled = settings.showOriginal;
 
-    if (!settings.autoTranslate) {
+    // «Не переводить этот сайт»: домен из списка исключений
+    // не переводится даже при включённом автопереводе.
+    const siteExcluded =
+      Array.isArray(settings.disabledSites) &&
+      settings.disabledSites.includes(
+        currentHost()
+      );
+
+    if (!settings.autoTranslate || siteExcluded) {
       if (session?.automatic) {
         restore();
       }
@@ -1147,9 +1161,32 @@
         changes.showOriginal
       ) {
         applySettings().catch(reportError);
+
+        return;
+      }
+
+      // Перечитываем настройки, только если изменился
+      // статус именно текущего сайта в списке исключений.
+      if (changes.disabledSites) {
+        const host = currentHost();
+
+        const before = changes.disabledSites.oldValue;
+        const after = changes.disabledSites.newValue;
+
+        const wasExcluded =
+          Array.isArray(before) &&
+          before.includes(host);
+
+        const isExcluded =
+          Array.isArray(after) &&
+          after.includes(host);
+
+        if (wasExcluded !== isExcluded) {
+          applySettings().catch(reportError);
+        }
       }
     }
   );
 
   applySettings().catch(reportError);
-})();
+})();

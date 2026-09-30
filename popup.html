@@ -195,6 +195,24 @@
       cursor: pointer;
     }
 
+    .option-text {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+
+    #siteHost {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+      overflow-wrap: anywhere;
+    }
+
+    .option.unavailable {
+      cursor: default;
+      opacity: 0.55;
+    }
+
     .hint {
       margin: -5px 0 15px;
       color: var(--muted);
@@ -309,6 +327,14 @@
         <input id="autoTranslate" type="checkbox">
       </label>
 
+      <label class="option" id="siteOption">
+        <span class="option-text">
+          <span>Не переводить этот сайт</span>
+          <span id="siteHost"></span>
+        </span>
+        <input id="skipSite" type="checkbox">
+      </label>
+
       <label class="option">
         <span>Оригинал по Alt</span>
         <input id="showOriginal" type="checkbox">
@@ -317,6 +343,8 @@
 
     <p class="hint">
       Зажми Alt и наведи курсор на переведённый текст.
+      «Не переводить этот сайт» действует на весь домен
+      и работает только с включённым автопереводом.
     </p>
 
     <div class="buttons">

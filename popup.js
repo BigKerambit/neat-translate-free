@@ -3,10 +3,18 @@ const autoTranslate = document.getElementById("autoTranslate");
 const showOriginal = document.getElementById("showOriginal");
 const themeButton = document.getElementById("themeButton");
 
+const siteOption = document.getElementById("siteOption");
+const siteHost = document.getElementById("siteHost");
+const skipSite = document.getElementById("skipSite");
+
 const translateButton = document.getElementById("translate");
 const selectionButton = document.getElementById("selection");
 const restoreButton = document.getElementById("restore");
 const errorElement = document.getElementById("error");
+
+// Домен активной вкладки, к которому относится
+// переключатель «Не переводить этот сайт».
+let currentHostname = "";
 
 function showError(message) {
   errorElement.textContent = message || "Произошла ошибка.";
@@ -31,6 +39,7 @@ function setBusy(busy) {
   target.disabled = busy;
   autoTranslate.disabled = busy;
   showOriginal.disabled = busy;
+  skipSite.disabled = busy || !currentHostname;
 
   translateButton.disabled = busy;
   selectionButton.disabled = busy;
@@ -50,6 +59,41 @@ async function activeTab() {
   }
 
   return tab;
+}
+
+// Сайт определяется доменом целиком: адреса с «www.»
+// и без него считаются одним и тем же сайтом,
+// а поддомены (например, gist.github.com) — отдельными.
+function normalizeHostname(hostname) {
+  const lower = hostname.toLowerCase();
+
+  return lower.startsWith("www.")
+    ? lower.slice(4)
+    : lower;
+}
+
+function tabHostname(tab) {
+  try {
+    const url = new URL(tab.url || "");
+
+    if (
+      url.protocol !== "http:" &&
+      url.protocol !== "https:"
+    ) {
+      return "";
+    }
+
+    return normalizeHostname(url.hostname);
+  } catch {
+    return "";
+  }
+}
+
+function syncSkipSite(disabledSites) {
+  skipSite.checked =
+    currentHostname !== "" &&
+    Array.isArray(disabledSites) &&
+    disabledSites.includes(currentHostname);
 }
 
 async function sendToPage(message) {
@@ -97,7 +141,8 @@ async function initialize() {
       target: "ru",
       autoTranslate: false,
       showOriginal: true,
-      darkMode: false
+      darkMode: false,
+      disabledSites: []
     });
 
     target.value = settings.target;
@@ -110,6 +155,22 @@ async function initialize() {
     await chrome.storage.local.remove("pausedSites");
 
     const tab = await activeTab();
+
+    currentHostname = tabHostname(tab);
+
+    if (currentHostname) {
+      siteHost.textContent = currentHostname;
+      syncSkipSite(settings.disabledSites);
+    } else {
+      // На служебных страницах (chrome://, магазин расширений
+      // и т. п.) контентный скрипт не работает,
+      // поэтому переключатель недоступен.
+      siteHost.textContent =
+        "Недоступно на этой странице";
+      skipSite.checked = false;
+      skipSite.disabled = true;
+      siteOption.classList.add("unavailable");
+    }
 
     const response = await chrome.runtime.sendMessage({
       action: "getAutoError",
@@ -161,6 +222,42 @@ showOriginal.addEventListener("change", async () => {
   }
 });
 
+skipSite.addEventListener("change", async () => {
+  clearError();
+
+  if (!currentHostname) {
+    skipSite.checked = false;
+    return;
+  }
+
+  try {
+    // Читаем свежий список: другие сайты могли быть
+    // добавлены на других страницах, пока попап был открыт.
+    const data = await chrome.storage.local.get({
+      disabledSites: []
+    });
+
+    const sites = new Set(
+      Array.isArray(data.disabledSites)
+        ? data.disabledSites
+        : []
+    );
+
+    if (skipSite.checked) {
+      sites.add(currentHostname);
+    } else {
+      sites.delete(currentHostname);
+    }
+
+    await chrome.storage.local.set({
+      disabledSites: [...sites]
+    });
+  } catch (error) {
+    skipSite.checked = !skipSite.checked;
+    showError(error.message);
+  }
+});
+
 themeButton.addEventListener("click", async () => {
   const previousValue = document.body.classList.contains("dark");
   const newValue = !previousValue;
@@ -176,6 +273,20 @@ themeButton.addEventListener("click", async () => {
     showError(error.message);
   }
 });
+
+// Поддерживаем переключатель в актуальном состоянии, если
+// список исключений изменился, пока попап был открыт.
+chrome.storage.onChanged.addListener(
+  (changes, areaName) => {
+    if (areaName !== "local" || !currentHostname) {
+      return;
+    }
+
+    if (changes.disabledSites) {
+      syncSkipSite(changes.disabledSites.newValue);
+    }
+  }
+);
 
 translateButton.addEventListener("click", () => {
   runAction({
