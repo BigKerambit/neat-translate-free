@@ -12,9 +12,21 @@ const selectionButton = document.getElementById("selection");
 const restoreButton = document.getElementById("restore");
 const errorElement = document.getElementById("error");
 
+const updateBanner = document.getElementById("updateBanner");
+const updateVersion = document.getElementById("updateVersion");
+const updateButton = document.getElementById("updateButton");
+const appVersion = document.getElementById("appVersion");
+const checkUpdatesButton =
+  document.getElementById("checkUpdates");
+
+const REPO_URL = "https://github.com/BigKerambit/neat-translate-free";
+
 // Домен активной вкладки, к которому относится
 // переключатель «Не переводить этот сайт».
 let currentHostname = "";
+
+// Ссылка, которую откроет кнопка «Обновить».
+let updateUrl = null;
 
 function showError(message) {
   errorElement.textContent = message || "Произошла ошибка.";
@@ -96,6 +108,22 @@ function syncSkipSite(disabledSites) {
     disabledSites.includes(currentHostname);
 }
 
+function renderUpdateInfo(info) {
+  if (info && typeof info.version === "string" && info.version) {
+    updateVersion.textContent = info.version;
+
+    updateUrl =
+      typeof info.url === "string" && info.url
+        ? info.url
+        : REPO_URL;
+
+    updateBanner.hidden = false;
+  } else {
+    updateBanner.hidden = true;
+    updateUrl = null;
+  }
+}
+
 async function sendToPage(message) {
   const tab = await activeTab();
 
@@ -142,7 +170,8 @@ async function initialize() {
       autoTranslate: false,
       showOriginal: true,
       darkMode: false,
-      disabledSites: []
+      disabledSites: [],
+      updateInfo: null
     });
 
     target.value = settings.target;
@@ -150,6 +179,11 @@ async function initialize() {
     showOriginal.checked = settings.showOriginal;
 
     applyTheme(settings.darkMode);
+
+    appVersion.textContent =
+      chrome.runtime.getManifest().version;
+
+    renderUpdateInfo(settings.updateInfo);
 
     // Удаляем сохранённый список пауз от предыдущей версии.
     await chrome.storage.local.remove("pausedSites");
@@ -180,6 +214,17 @@ async function initialize() {
     if (response?.error) {
       showError(response.error);
     }
+
+    // Фоновая проверка обновлений: сама решит, пора ли
+    // дёргать GitHub (не чаще раза в 12 часов).
+    chrome.runtime.sendMessage({
+      action: "checkForUpdates",
+      force: false
+    }).then((updateResponse) => {
+      if (updateResponse?.ok) {
+        renderUpdateInfo(updateResponse.update ?? null);
+      }
+    }).catch(() => {});
   } catch (error) {
     showError(error.message);
   }
@@ -274,16 +319,63 @@ themeButton.addEventListener("click", async () => {
   }
 });
 
-// Поддерживаем переключатель в актуальном состоянии, если
-// список исключений изменился, пока попап был открыт.
+updateButton.addEventListener("click", () => {
+  if (updateUrl) {
+    chrome.tabs.create({ url: updateUrl }).catch(() => {});
+  }
+});
+
+checkUpdatesButton.addEventListener("click", async () => {
+  clearError();
+
+  checkUpdatesButton.disabled = true;
+  checkUpdatesButton.classList.remove("ok");
+  checkUpdatesButton.classList.add("spin");
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: "checkForUpdates",
+      force: true
+    });
+
+    if (!response?.ok) {
+      throw new Error(
+        response?.error || "Не удалось проверить обновления."
+      );
+    }
+
+    renderUpdateInfo(response.update ?? null);
+
+    if (!response.update) {
+      // Галочка «у вас последняя версия» на пару секунд.
+      checkUpdatesButton.classList.add("ok");
+
+      setTimeout(() => {
+        checkUpdatesButton.classList.remove("ok");
+      }, 2500);
+    }
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    checkUpdatesButton.classList.remove("spin");
+    checkUpdatesButton.disabled = false;
+  }
+});
+
+// Поддерживаем переключатель и баннер в актуальном состоянии,
+// если хранилище изменилось, пока попап был открыт.
 chrome.storage.onChanged.addListener(
   (changes, areaName) => {
-    if (areaName !== "local" || !currentHostname) {
+    if (areaName !== "local") {
       return;
     }
 
-    if (changes.disabledSites) {
+    if (changes.disabledSites && currentHostname) {
       syncSkipSite(changes.disabledSites.newValue);
+    }
+
+    if (changes.updateInfo) {
+      renderUpdateInfo(changes.updateInfo.newValue ?? null);
     }
   }
 );

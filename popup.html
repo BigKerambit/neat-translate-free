@@ -20,6 +20,7 @@
       --primary-hover: #4055dc;
       --soft: #f0f2ff;
       --error: #c83232;
+      --success: #2f9e44;
       --shadow: 0 14px 35px rgba(35, 49, 93, 0.08);
     }
 
@@ -34,6 +35,7 @@
       --primary-hover: #8796ff;
       --soft: #292f50;
       --error: #ff8585;
+      --success: #51cf66;
       --shadow: 0 14px 35px rgba(0, 0, 0, 0.18);
     }
 
@@ -133,6 +135,57 @@
 
     body.dark .moon-icon {
       display: block;
+    }
+
+    .update-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: -6px 0 15px;
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--primary);
+      border-radius: 12px;
+      background: var(--soft);
+    }
+
+    .update-banner[hidden] {
+      display: none;
+    }
+
+    .update-text {
+      min-width: 0;
+      font-size: 12px;
+      font-weight: 550;
+      overflow-wrap: anywhere;
+    }
+
+    .update-text b {
+      font-weight: 750;
+    }
+
+    .update-button {
+      flex: 0 0 auto;
+      min-height: 30px;
+      padding: 5px 12px;
+      border: 0;
+      border-radius: 9px;
+      background: var(--primary);
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 650;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .update-button:hover {
+      background: var(--primary-hover);
+    }
+
+    .update-button:active {
+      transform: scale(0.96);
     }
 
     .field-label {
@@ -276,6 +329,71 @@
     #error:empty {
       display: none;
     }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 12px 2px -2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .footer a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-fill {
+      flex: 1;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      min-height: 24px;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 14px;
+      line-height: 1;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .icon-button:hover:not(:disabled) {
+      background: var(--soft);
+      color: var(--text);
+    }
+
+    .icon-button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .icon-button.spin {
+      animation: nt-rotate 0.9s linear infinite;
+    }
+
+    .icon-button.ok {
+      color: var(--success);
+      animation: none;
+    }
+
+    @keyframes nt-rotate {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   </style>
 </head>
 
@@ -306,6 +424,16 @@
         <path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z"></path>
       </svg>
     </button>
+
+    <div id="updateBanner" class="update-banner" hidden>
+      <span class="update-text">
+        Доступна версия <b id="updateVersion"></b>
+      </span>
+
+      <button id="updateButton" class="update-button" type="button">
+        Обновить
+      </button>
+    </div>
 
     <label class="field-label" for="target">Язык перевода</label>
 
@@ -364,8 +492,28 @@
     </div>
 
     <p id="error" role="alert"></p>
+
+    <div class="footer">
+      <a
+        href="https://github.com/BigKerambit/neat-translate-free"
+        target="_blank"
+        rel="noopener"
+      >GitHub</a>
+
+      <span class="footer-fill"></span>
+
+      <span>v<span id="appVersion"></span></span>
+
+      <button
+        id="checkUpdates"
+        class="icon-button"
+        type="button"
+        title="Проверить обновления"
+        aria-label="Проверить обновления"
+      >⟳</button>
+    </div>
   </main>
 
   <script src="popup.js"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a433ba56fb33663a',t:'MTc5MDc3NjU1NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
