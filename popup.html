@@ -135,57 +135,6 @@
       display: block;
     }
 
-    .update-banner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin: -6px 0 15px;
-      padding: 9px 11px;
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--primary);
-      border-radius: 12px;
-      background: var(--soft);
-    }
-
-    .update-banner[hidden] {
-      display: none;
-    }
-
-    .update-text {
-      min-width: 0;
-      font-size: 12px;
-      font-weight: 550;
-      overflow-wrap: anywhere;
-    }
-
-    .update-text b {
-      font-weight: 750;
-    }
-
-    .update-button {
-      flex: 0 0 auto;
-      min-height: 30px;
-      padding: 5px 12px;
-      border: 0;
-      border-radius: 9px;
-      background: var(--primary);
-      color: #fff;
-      cursor: pointer;
-      font: inherit;
-      font-size: 12px;
-      font-weight: 650;
-      transition: background 0.15s, transform 0.15s;
-    }
-
-    .update-button:hover {
-      background: var(--primary-hover);
-    }
-
-    .update-button:active {
-      transform: scale(0.96);
-    }
-
     .field-label {
       display: block;
       margin: 0 0 7px;
@@ -244,24 +193,6 @@
       margin: 0;
       accent-color: var(--primary);
       cursor: pointer;
-    }
-
-    .option-text {
-      display: grid;
-      gap: 1px;
-      min-width: 0;
-    }
-
-    #siteHost {
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 400;
-      overflow-wrap: anywhere;
-    }
-
-    .option.unavailable {
-      cursor: default;
-      opacity: 0.55;
     }
 
     .hint {
@@ -327,28 +258,6 @@
     #error:empty {
       display: none;
     }
-
-    .footer {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 12px 2px -2px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .footer a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    .footer-fill {
-      flex: 1;
-    }
   </style>
 </head>
 
@@ -380,16 +289,6 @@
       </svg>
     </button>
 
-    <div id="updateBanner" class="update-banner" hidden>
-      <span class="update-text">
-        Доступна версия <b id="updateVersion"></b>
-      </span>
-
-      <button id="updateButton" class="update-button" type="button">
-        Обновить
-      </button>
-    </div>
-
     <label class="field-label" for="target">Язык перевода</label>
 
     <select id="target">
@@ -410,14 +309,6 @@
         <input id="autoTranslate" type="checkbox">
       </label>
 
-      <label class="option" id="siteOption">
-        <span class="option-text">
-          <span>Не переводить этот сайт</span>
-          <span id="siteHost"></span>
-        </span>
-        <input id="skipSite" type="checkbox">
-      </label>
-
       <label class="option">
         <span>Оригинал по Alt</span>
         <input id="showOriginal" type="checkbox">
@@ -426,8 +317,6 @@
 
     <p class="hint">
       Зажми Alt и наведи курсор на переведённый текст.
-      «Не переводить этот сайт» действует на весь домен
-      и работает только с включённым автопереводом.
     </p>
 
     <div class="buttons">
@@ -447,21 +336,9 @@
     </div>
 
     <p id="error" role="alert"></p>
-
-    <div class="footer">
-      <a
-        href="https://github.com/BigKerambit/neat-translate-free"
-        target="_blank"
-        rel="noopener"
-      >GitHub</a>
-
-      <span class="footer-fill"></span>
-
-      <span>v<span id="appVersion"></span></span>
-    </div>
   </main>
 
   <script src="popup.js"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a43539915c6bdc56',t:'MTc5MDc5MjI1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4b281995d659dc1',t:'MTc5MjEwNTkyMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c01a94c73b74392e4234840661791215815920" integrity="sha512-L0ha0OXavK/8okipN9F8BtP84dg9DUhPERbBXzwI6dgTA55d2+yweo3pn5CSFYs45/r8md2+xvUPtTdvTNRfjA==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body>
 </html>
