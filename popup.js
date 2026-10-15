@@ -3,10 +3,28 @@ const autoTranslate = document.getElementById("autoTranslate");
 const showOriginal = document.getElementById("showOriginal");
 const themeButton = document.getElementById("themeButton");
 
+const siteOption = document.getElementById("siteOption");
+const siteHost = document.getElementById("siteHost");
+const skipSite = document.getElementById("skipSite");
+
 const translateButton = document.getElementById("translate");
 const selectionButton = document.getElementById("selection");
 const restoreButton = document.getElementById("restore");
 const errorElement = document.getElementById("error");
+
+const updateBanner = document.getElementById("updateBanner");
+const updateVersion = document.getElementById("updateVersion");
+const updateButton = document.getElementById("updateButton");
+const appVersion = document.getElementById("appVersion");
+
+const REPO_URL = "https://github.com/BigKerambit/neat-translate-free";
+
+// Домен активной вкладки, к которому относится
+// переключатель «Не переводить этот сайт».
+let currentHostname = "";
+
+// Ссылка, которую откроет кнопка «Обновить».
+let updateUrl = null;
 
 function showError(message) {
   errorElement.textContent = message || "Произошла ошибка.";
@@ -31,6 +49,7 @@ function setBusy(busy) {
   target.disabled = busy;
   autoTranslate.disabled = busy;
   showOriginal.disabled = busy;
+  skipSite.disabled = busy || !currentHostname;
 
   translateButton.disabled = busy;
   selectionButton.disabled = busy;
@@ -50,6 +69,57 @@ async function activeTab() {
   }
 
   return tab;
+}
+
+// Сайт определяется доменом целиком: адреса с «www.»
+// и без него считаются одним и тем же сайтом,
+// а поддомены (например, gist.github.com) — отдельными.
+function normalizeHostname(hostname) {
+  const lower = hostname.toLowerCase();
+
+  return lower.startsWith("www.")
+    ? lower.slice(4)
+    : lower;
+}
+
+function tabHostname(tab) {
+  try {
+    const url = new URL(tab.url || "");
+
+    if (
+      url.protocol !== "http:" &&
+      url.protocol !== "https:"
+    ) {
+      return "";
+    }
+
+    return normalizeHostname(url.hostname);
+  } catch {
+    return "";
+  }
+}
+
+function syncSkipSite(disabledSites) {
+  skipSite.checked =
+    currentHostname !== "" &&
+    Array.isArray(disabledSites) &&
+    disabledSites.includes(currentHostname);
+}
+
+function renderUpdateInfo(info) {
+  if (info && typeof info.version === "string" && info.version) {
+    updateVersion.textContent = info.version;
+
+    updateUrl =
+      typeof info.url === "string" && info.url
+        ? info.url
+        : REPO_URL;
+
+    updateBanner.hidden = false;
+  } else {
+    updateBanner.hidden = true;
+    updateUrl = null;
+  }
 }
 
 async function sendToPage(message) {
@@ -97,7 +167,9 @@ async function initialize() {
       target: "ru",
       autoTranslate: false,
       showOriginal: true,
-      darkMode: false
+      darkMode: false,
+      disabledSites: [],
+      updateInfo: null
     });
 
     target.value = settings.target;
@@ -106,10 +178,31 @@ async function initialize() {
 
     applyTheme(settings.darkMode);
 
+    appVersion.textContent =
+      chrome.runtime.getManifest().version;
+
+    renderUpdateInfo(settings.updateInfo);
+
     // Удаляем сохранённый список пауз от предыдущей версии.
     await chrome.storage.local.remove("pausedSites");
 
     const tab = await activeTab();
+
+    currentHostname = tabHostname(tab);
+
+    if (currentHostname) {
+      siteHost.textContent = currentHostname;
+      syncSkipSite(settings.disabledSites);
+    } else {
+      // На служебных страницах (chrome://, магазин расширений
+      // и т. п.) контентный скрипт не работает,
+      // поэтому переключатель недоступен.
+      siteHost.textContent =
+        "Недоступно на этой странице";
+      skipSite.checked = false;
+      skipSite.disabled = true;
+      siteOption.classList.add("unavailable");
+    }
 
     const response = await chrome.runtime.sendMessage({
       action: "getAutoError",
@@ -119,6 +212,10 @@ async function initialize() {
     if (response?.error) {
       showError(response.error);
     }
+
+    // Проверка обновлений идёт фоном при запуске браузера
+    // и раз в сутки (alarms) — здесь просто показываем
+    // уже найденный результат из хранилища.
   } catch (error) {
     showError(error.message);
   }
@@ -161,6 +258,42 @@ showOriginal.addEventListener("change", async () => {
   }
 });
 
+skipSite.addEventListener("change", async () => {
+  clearError();
+
+  if (!currentHostname) {
+    skipSite.checked = false;
+    return;
+  }
+
+  try {
+    // Читаем свежий список: другие сайты могли быть
+    // добавлены на других страницах, пока попап был открыт.
+    const data = await chrome.storage.local.get({
+      disabledSites: []
+    });
+
+    const sites = new Set(
+      Array.isArray(data.disabledSites)
+        ? data.disabledSites
+        : []
+    );
+
+    if (skipSite.checked) {
+      sites.add(currentHostname);
+    } else {
+      sites.delete(currentHostname);
+    }
+
+    await chrome.storage.local.set({
+      disabledSites: [...sites]
+    });
+  } catch (error) {
+    skipSite.checked = !skipSite.checked;
+    showError(error.message);
+  }
+});
+
 themeButton.addEventListener("click", async () => {
   const previousValue = document.body.classList.contains("dark");
   const newValue = !previousValue;
@@ -176,6 +309,30 @@ themeButton.addEventListener("click", async () => {
     showError(error.message);
   }
 });
+
+updateButton.addEventListener("click", () => {
+  if (updateUrl) {
+    chrome.tabs.create({ url: updateUrl }).catch(() => {});
+  }
+});
+
+// Поддерживаем переключатель и баннер в актуальном состоянии,
+// если хранилище изменилось, пока попап был открыт.
+chrome.storage.onChanged.addListener(
+  (changes, areaName) => {
+    if (areaName !== "local") {
+      return;
+    }
+
+    if (changes.disabledSites && currentHostname) {
+      syncSkipSite(changes.disabledSites.newValue);
+    }
+
+    if (changes.updateInfo) {
+      renderUpdateInfo(changes.updateInfo.newValue ?? null);
+    }
+  }
+);
 
 translateButton.addEventListener("click", () => {
   runAction({
@@ -197,4 +354,9 @@ restoreButton.addEventListener("click", () => {
   });
 });
 
-initialize();
+// В расширении chrome API доступен всегда; проверка нужна,
+// чтобы файл без ошибок открывался и как обычный HTML
+// (например, в предпросмотре).
+if (typeof chrome !== "undefined" && chrome.runtime?.id) {
+  initialize();
+}

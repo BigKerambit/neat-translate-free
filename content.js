@@ -9,6 +9,17 @@
   const MAX_CHUNK_LENGTH = 700;
   const WORKERS = 8;
 
+  // Пакетный перевод: короткие однострочные строки
+  // объединяются в один запрос (меньше обращений к
+  // сервису -> быстрее и реже упираемся в лимит частоты).
+  const BATCH_MAX_ITEMS = 20;
+  const BATCH_MAX_LENGTH = 1000;
+  const BATCH_ITEM_MAX_LENGTH = 300;
+
+  // Верхний предел проходов ручного перевода,
+  // страховка от бесконечного цикла на «живых» страницах.
+  const MAX_MANUAL_PASSES = 100;
+
   const SKIP_SELECTOR = [
     "script",
     "style",
@@ -36,13 +47,23 @@
     "aria-label"
   ];
 
+  // За атрибутом value тоже следим: у кнопок
+  // <input type="button|submit|reset"> там надпись.
+  const OBSERVED_ATTRIBUTES =
+    ATTRIBUTES.concat("value");
+
   let session = null;
   let showOriginalEnabled = true;
   let floatingHost = null;
 
   function currentHost() {
     try {
-      return location.hostname;
+      const hostname = location.hostname.toLowerCase();
+
+      // Адреса с «www.» и без него считаются одним сайтом.
+      return hostname.startsWith("www.")
+        ? hostname.slice(4)
+        : hostname;
     } catch {
       return "";
     }
@@ -127,6 +148,77 @@
     );
   }
 
+  // Грубый профиль алфавита текста: позволяет без
+  // запросов к сервису распознать языки с отличной
+  // от латиницы письменностью.
+  function scriptProfile(text) {
+    let cyrillic = 0;
+    let kana = 0;
+    let han = 0;
+    let latin = 0;
+
+    for (const char of text) {
+      const code = char.codePointAt(0);
+
+      if (code >= 0x0400 && code <= 0x052f) {
+        cyrillic++;
+      } else if (
+        code >= 0x3040 &&
+        code <= 0x30ff
+      ) {
+        kana++;
+      } else if (
+        code >= 0x4e00 &&
+        code <= 0x9fff
+      ) {
+        han++;
+      } else if (
+        (code >= 0x0041 && code <= 0x007a) ||
+        (code >= 0x00c0 && code <= 0x024f)
+      ) {
+        latin++;
+      }
+    }
+
+    return {
+      cyrillic,
+      kana,
+      han,
+      latin,
+      letters: cyrillic + kana + han + latin
+    };
+  }
+
+  // Текст уже на целевом языке — по алфавиту. Латинские
+  // языки между собой так не различить, их добирает
+  // детектор языка в фоне (по ответу сервиса).
+  function sameLanguage(text, target) {
+    const profile = scriptProfile(text);
+
+    if (profile.letters === 0) {
+      return false;
+    }
+
+    if (target === "ru") {
+      return (
+        profile.cyrillic / profile.letters >= 0.7
+      );
+    }
+
+    if (target === "ja") {
+      return profile.kana / profile.letters >= 0.3;
+    }
+
+    if (target === "zh-CN") {
+      return (
+        profile.han / profile.letters >= 0.7 &&
+        profile.kana === 0
+      );
+    }
+
+    return false;
+  }
+
   function needsTranslation(currentSession, item) {
     const value = read(item);
 
@@ -143,6 +235,21 @@
       previous &&
       previous.translated === value
     ) {
+      return false;
+    }
+
+    // Текст уже на целевом языке — не трогаем, иначе
+    // сервис «переписывает» слова в тот же язык
+    // и искажает их. Запоминаем, чтобы не собирать
+    // этот элемент снова и снова.
+    if (sameLanguage(value, currentSession.target)) {
+      saveRecord(
+        currentSession,
+        item,
+        value,
+        value
+      );
+
       return false;
     }
 
@@ -258,6 +365,38 @@
           const item = {
             node: element,
             attribute
+          };
+
+          if (
+            needsTranslation(
+              currentSession,
+              item
+            )
+          ) {
+            items.push(item);
+          }
+        }
+      }
+
+      // У кнопок <input type="button|submit|reset"> надпись
+      // живёт в атрибуте value, а не в текстовом узле.
+      if (items.length < limit) {
+        for (
+          const element of root.querySelectorAll(
+            'input[type="button"][value], input[type="submit"][value], input[type="reset"][value]'
+          )
+        ) {
+          if (items.length >= limit) {
+            break;
+          }
+
+          if (!allowed(element)) {
+            continue;
+          }
+
+          const item = {
+            node: element,
+            attribute: "value"
           };
 
           if (
@@ -431,6 +570,237 @@
     return true;
   }
 
+  function sleep(delay) {
+    return new Promise((resolve) =>
+      setTimeout(resolve, delay)
+    );
+  }
+
+  // Короткие однострочные элементы группируются в пакет,
+  // длинные и многострочные идут отдельными запросами.
+  function makeUnits(items) {
+    const units = [];
+    let batch = [];
+    let batchLength = 0;
+
+    const flushBatch = () => {
+      if (batch.length > 0) {
+        units.push(batch);
+        batch = [];
+        batchLength = 0;
+      }
+    };
+
+    for (const item of items) {
+      const value = read(item);
+
+      const parts =
+        typeof value === "string"
+          ? outerWhitespace(value)
+          : null;
+
+      const batchable =
+        parts !== null &&
+        parts.middle.length > 0 &&
+        !parts.middle.includes("\n") &&
+        parts.middle.length <= BATCH_ITEM_MAX_LENGTH;
+
+      if (!batchable) {
+        flushBatch();
+        units.push(item);
+        continue;
+      }
+
+      if (
+        batch.length >= BATCH_MAX_ITEMS ||
+        batchLength + parts.middle.length >
+          BATCH_MAX_LENGTH
+      ) {
+        flushBatch();
+      }
+
+      batch.push(item);
+      batchLength += parts.middle.length;
+    }
+
+    flushBatch();
+
+    return units;
+  }
+
+  async function translateBatchUnit(
+    currentSession,
+    batchItems
+  ) {
+    const usable = [];
+
+    for (const item of batchItems) {
+      const original = read(item);
+
+      if (!useful(original)) {
+        continue;
+      }
+
+      const parts = outerWhitespace(original);
+
+      if (!parts.middle) {
+        continue;
+      }
+
+      usable.push({ item, parts, original });
+    }
+
+    if (usable.length === 0) {
+      return {
+        failed: 0,
+        firstError: null,
+        rateLimited: false
+      };
+    }
+
+    const markFailed = (entry) => {
+      currentSession.failures.set(
+        entry.item.node,
+        {
+          value: entry.original,
+          attribute: entry.item.attribute,
+          time: Date.now()
+        }
+      );
+    };
+
+    let translatedMiddles = null;
+    let firstError = null;
+
+    try {
+      const response =
+        await chrome.runtime.sendMessage({
+          action: "translateBatch",
+          texts: usable.map(
+            (entry) => entry.parts.middle
+          ),
+          target: currentSession.target
+        });
+
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ||
+          "Не удалось перевести текст."
+        );
+      }
+
+      if (
+        !Array.isArray(response.translated) ||
+        response.translated.length !== usable.length
+      ) {
+        throw new Error(
+          "Сервис перевода вернул некорректный ответ."
+        );
+      }
+
+      translatedMiddles = response.translated;
+    } catch (error) {
+      firstError = error;
+    }
+
+    let rateLimited = Boolean(
+      firstError?.message.includes(
+        "ограничил частоту"
+      )
+    );
+
+    // Пакетный запрос не удался — надёжный путь:
+    // перевести элементы по очереди, как раньше.
+    if (!translatedMiddles) {
+      let failed = 0;
+
+      for (const entry of usable) {
+        if (
+          !currentSession.active ||
+          rateLimited
+        ) {
+          break;
+        }
+
+        try {
+          await translateItem(
+            currentSession,
+            entry.item
+          );
+        } catch (error) {
+          failed++;
+          firstError = firstError || error;
+          markFailed(entry);
+
+          if (
+            error.message.includes(
+              "ограничил частоту"
+            )
+          ) {
+            rateLimited = true;
+          }
+        }
+      }
+
+      return { failed, firstError, rateLimited };
+    }
+
+    let failed = 0;
+
+    for (
+      let index = 0;
+      index < usable.length;
+      index++
+    ) {
+      const entry = usable[index];
+      const translatedMiddle =
+        translatedMiddles[index];
+
+      if (
+        !currentSession.active ||
+        read(entry.item) !== entry.original
+      ) {
+        continue;
+      }
+
+      if (
+        typeof translatedMiddle !== "string" ||
+        translatedMiddle.length === 0
+      ) {
+        failed++;
+
+        firstError =
+          firstError ||
+          new Error(
+            "Сервис вернул пустой перевод."
+          );
+
+        markFailed(entry);
+        continue;
+      }
+
+      const translated =
+        entry.parts.before +
+        translatedMiddle +
+        entry.parts.after;
+
+      saveRecord(
+        currentSession,
+        entry.item,
+        entry.original,
+        translated
+      );
+
+      if (translated === entry.original) {
+        continue;
+      }
+
+      write(entry.item, translated);
+    }
+
+    return { failed, firstError, rateLimited };
+  }
+
   function observeRoot(currentSession, root) {
     if (
       currentSession.observedRoots.has(root)
@@ -443,7 +813,7 @@
       childList: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ATTRIBUTES
+      attributeFilter: OBSERVED_ATTRIBUTES
     });
 
     currentSession.observedRoots.add(root);
@@ -517,10 +887,28 @@
       return;
     }
 
+    // Защита от «голодания» на постоянно мутирующих
+    // страницах (ленты, чаты): дебаунс не вечен,
+    // максимум через STARVATION_MS скан запускается.
+    const STARVATION_MS = 2000;
+    const now = Date.now();
+
+    if (!currentSession.pendingSince) {
+      currentSession.pendingSince = now;
+    }
+
+    const effectiveDelay =
+      now - currentSession.pendingSince >
+      STARVATION_MS
+        ? 0
+        : delay;
+
     clearTimeout(currentSession.timer);
 
     currentSession.timer = setTimeout(
       () => {
+        currentSession.pendingSince = null;
+
         if (!currentSession.active) {
           return;
         }
@@ -532,21 +920,42 @@
 
         scan(currentSession)
           .then((result) => {
-            if (!currentSession.automatic) {
+            if (!currentSession.active) {
               return;
             }
 
-            if (result.failed > 0) {
-              reportError(
-                new Error(result.error)
-              );
+            if (currentSession.automatic) {
+              if (result.failed > 0) {
+                reportError(
+                  new Error(result.error)
+                );
+
+                // Повторяем неудавшееся с паузой, чтобы
+                // не молотить сервис, но и не бросать
+                // недопереведённые фрагменты навсегда.
+                schedule(currentSession, 20000);
+
+                return;
+              }
+
+              clearReportedError();
+
+              if (result.hasMore) {
+                schedule(currentSession, 80);
+              }
 
               return;
             }
 
-            clearReportedError();
-
-            if (result.hasMore) {
+            // Ручной перевод: добираем динамический
+            // контент до конца, но без повторов ошибок.
+            if (
+              result.hasMore &&
+              result.failed === 0 &&
+              !(result.error || "").includes(
+                "ограничил частоту"
+              )
+            ) {
               schedule(currentSession, 80);
             }
           })
@@ -556,7 +965,7 @@
             }
           });
       },
-      delay
+      effectiveDelay
     );
   }
 
@@ -568,6 +977,7 @@
       running: false,
       promise: null,
       timer: null,
+      pendingSince: null,
       scanAfterCurrent: false,
       records: new Map(),
       failures: new WeakMap(),
@@ -679,19 +1089,45 @@
           MAX_ITEMS_PER_PASS
         );
 
-        let nextIndex = 0;
+        const units = makeUnits(items);
+        let nextUnit = 0;
 
         async function worker() {
           while (
             currentSession.active &&
-            nextIndex < items.length
+            nextUnit < units.length
           ) {
-            const item = items[nextIndex++];
+            const unit = units[nextUnit++];
+
+            if (Array.isArray(unit)) {
+              const batchResult =
+                await translateBatchUnit(
+                  currentSession,
+                  unit
+                );
+
+              failed += batchResult.failed;
+
+              if (
+                !firstError &&
+                batchResult.firstError
+              ) {
+                firstError =
+                  batchResult.firstError;
+              }
+
+              if (batchResult.rateLimited) {
+                nextUnit = units.length;
+                break;
+              }
+
+              continue;
+            }
 
             try {
               await translateItem(
                 currentSession,
-                item
+                unit
               );
             } catch (error) {
               failed++;
@@ -701,10 +1137,10 @@
               }
 
               currentSession.failures.set(
-                item.node,
+                unit.node,
                 {
-                  value: read(item),
-                  attribute: item.attribute,
+                  value: read(unit),
+                  attribute: unit.attribute,
                   time: Date.now()
                 }
               );
@@ -714,7 +1150,7 @@
                   "ограничил частоту"
                 )
               ) {
-                nextIndex = items.length;
+                nextUnit = units.length;
                 break;
               }
             }
@@ -726,7 +1162,7 @@
             {
               length: Math.min(
                 WORKERS,
-                items.length
+                units.length
               )
             },
             () => worker()
@@ -779,7 +1215,26 @@
     }
 
     const currentSession = session;
-    const result = await scan(currentSession);
+
+    // Ручной перевод доводит страницу до конца: за один
+    // проход переводится не более MAX_ITEMS_PER_PASS
+    // элементов, а на длинных страницах их тысячи.
+    let result = await scan(currentSession);
+    let passes = 1;
+
+    while (
+      !automatic &&
+      currentSession.active &&
+      result.hasMore &&
+      passes < MAX_MANUAL_PASSES &&
+      !(result.error || "").includes(
+        "ограничил частоту"
+      )
+    ) {
+      await sleep(90);
+      result = await scan(currentSession);
+      passes++;
+    }
 
     if (
       automatic &&
@@ -1115,16 +1570,25 @@
     }
   );
 
-    async function applySettings() {
+  async function applySettings() {
     const settings = await chrome.storage.local.get({
       autoTranslate: false,
       target: "ru",
-      showOriginal: true
+      showOriginal: true,
+      disabledSites: []
     });
 
     showOriginalEnabled = settings.showOriginal;
 
-    if (!settings.autoTranslate) {
+    // «Не переводить этот сайт»: домен из списка исключений
+    // не переводится даже при включённом автопереводе.
+    const siteExcluded =
+      Array.isArray(settings.disabledSites) &&
+      settings.disabledSites.includes(
+        currentHost()
+      );
+
+    if (!settings.autoTranslate || siteExcluded) {
       if (session?.automatic) {
         restore();
       }
@@ -1147,9 +1611,32 @@
         changes.showOriginal
       ) {
         applySettings().catch(reportError);
+
+        return;
+      }
+
+      // Перечитываем настройки, только если изменился
+      // статус именно текущего сайта в списке исключений.
+      if (changes.disabledSites) {
+        const host = currentHost();
+
+        const before = changes.disabledSites.oldValue;
+        const after = changes.disabledSites.newValue;
+
+        const wasExcluded =
+          Array.isArray(before) &&
+          before.includes(host);
+
+        const isExcluded =
+          Array.isArray(after) &&
+          after.includes(host);
+
+        if (wasExcluded !== isExcluded) {
+          applySettings().catch(reportError);
+        }
       }
     }
   );
 
   applySettings().catch(reportError);
-})();
+})();
